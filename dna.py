@@ -12,10 +12,10 @@ FASTA_PATH = "./data/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna
 FAI_PATH = "./data/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna.fai"
 
 VCF_PATHS = [
-    "./data/grch38_calls_filtered_chr1.vcf.gz",
+    "./data/grch38_calls_filtered_chr2.vcf.gz",
 ]
 
-CHRS = ["chr1", ]
+CHRS = ["chr2", ]
 
 
 class EnumNameOnly(Enum):
@@ -94,7 +94,7 @@ class VariantType(EnumNameOnly):
     SNP = 0
     INS = 1
     DEL = 2
-    OTHER = 3
+    OTHER = 3  # mostly mix between INS/DEL
 
 
 VT = VariantType
@@ -186,12 +186,13 @@ class InvalidVariantsError(ValueError):
 
 
 def filter_variants(variants: List[Variant], contig: str, i: int):
+    """
+    This tries to filter out incompatible calls, assuming everything should be diploid
+    This is sort of useless as we only display one sequence anyway
+    so if there are multiple calls at a locus (e.g. an insertion and an SNP)
+    we have to choose one in the end.
+    """
     variants.sort(key=lambda v: -v.qual)
-
-    # The following tries to filter out incompatible calls, assuming everything should be diploid
-    # This is sort of useless as we only display one sequence anyway
-    # so if there are multiple calls at a locus (e.g. an insertion and an SNP)
-    # we have to choose one in the end.
 
     if len(variants) > 2:
         logger.warning(
@@ -218,6 +219,12 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
             # There seem to be some weird INDEL calls, e.g. the one at chr1:4060135
             # is based on only one read but gets a higher quality score then the
             # hom alt call based on 10s of reads
+            # TODO: bcftools call seems to make some very clear mistakes when an SNP is
+            #       colocated with an insert.
+            #       E.g. at chr2:15909961 the SNP is called homozygous alt even though it
+            #       appears in exactly 50% of reads! Unfortunately we throw the insert away
+            #       here even though it's clearly real.
+            #       Probably best to fix this when calling, not in post
             logger.warning(
                 f"{contig}:{i} One of 2 variant calls not heterozygous, dropping indel!")
             variants = [v for v in variants if v.type == VT.SNP]
@@ -312,7 +319,7 @@ def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine
 
 with gzip.open(VCF_PATHS[0], mode="rt", encoding="utf-8") as vcf_file, \
         open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
-
-    for l in get_consensus_sequence(vcf_file, ref_file, fai_index["chr1"]):
-        # TODO: seems like it reads a few chars into the next sequence?
-        pass
+    for contig in CHRS:
+        for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
+            # TODO: seems like it reads a few chars into the next sequence?
+            pass
