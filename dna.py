@@ -229,9 +229,9 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
     return variants
 
 
-def iterate_ref(ref_file: TextIO, start_pos: int, fai_line: FaiLine) -> Iterator[Tuple[int, Base]]:
+def iterate_ref(ref_file: TextIO, fai_line: FaiLine) -> Iterator[Tuple[int, Base]]:
     contig = fai_line.contig
-    ref_file.seek(start_pos)
+    ref_file.seek(fai_line.start)
     i = 0
     valid_bases = frozenset(base_to_enum.keys())
     for line in ref_file:
@@ -255,7 +255,7 @@ def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine
     vcf_iter = iterate_vcf(vcf_file, contig)
     next_variant = next(vcf_iter, None)
 
-    reference = iterate_ref(ref_file, fai_line.start, contig)
+    reference = iterate_ref(ref_file, fai_line)
 
     print(fai_line)
 
