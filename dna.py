@@ -229,15 +229,23 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
     return variants
 
 
-def ref_iter(ref_file: TextIO, start_pos: int, contig: str) -> Iterator[Tuple[int, Base]]:
+def iterate_ref(ref_file: TextIO, start_pos: int, fai_line: FaiLine) -> Iterator[Tuple[int, Base]]:
+    contig = fai_line.contig
     ref_file.seek(start_pos)
     i = 0
     valid_bases = frozenset(base_to_enum.keys())
     for line in ref_file:
         for c in line.strip():
+            if i >= fai_line.len:
+                return
+
             if c in valid_bases:
                 i += 1
                 yield i, base_to_enum[c]
+            elif c == ">":
+                logger.warning(
+                    f"{contig}:{i} Contig ended prematurely, expected {fai_line.len} bases, got {i}.")
+                return
             else:
                 logger.error(f"{contig}:{i} Invalid char '{c}' in fasta")
 
@@ -247,14 +255,12 @@ def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine
     vcf_iter = iterate_vcf(vcf_file, contig)
     next_variant = next(vcf_iter, None)
 
-    reference = ref_iter(ref_file, fai_line.start, contig)
+    reference = iterate_ref(ref_file, fai_line.start, contig)
 
     print(fai_line)
 
     n_diffs = 0
     for i, ref_base in reference:
-        if i > fai_line.len:
-            return
         if i % 1E6 == 0:
             print(i, n_diffs)
 
