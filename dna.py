@@ -134,7 +134,7 @@ bypl: # of bytes per line
 def read_fai(filename: str, contigs: List[str]) -> Dict[str, FaiLine]:
     fai_index = {}
 
-    with open(FAI_PATH, encoding="utf-8") as f:
+    with open(filename, encoding="utf-8") as f:
         for line in f:
             cols = line.strip().split("\t")
             if cols[0] in contigs:
