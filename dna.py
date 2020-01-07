@@ -8,16 +8,6 @@ from itertools import zip_longest
 logger = logging.getLogger()
 logger.setLevel("WARN")
 
-FASTA_PATH = "./data/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna"
-FAI_PATH = "./data/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna.fai"
-
-VCF_PATHS = [
-    "./data/grch38_calls_filtered_chr2.vcf.gz",
-]
-
-CHRS = ["chr2", ]
-
-
 class EnumNameOnly(Enum):
     def __repr__(self):
         return self.name
@@ -54,6 +44,7 @@ base_to_enum = {"N": Base.N, "A": Base.A,
                 "B": Base.B, "D": Base.D, "H": Base.H,
                 "V": Base.V}
 
+INVERSE_BASES = {B.A: B.T, B.T: B.A, B.C: B.G, B.G: B.C}
 
 class Genotype(EnumNameOnly):
     g00 = 0
@@ -150,10 +141,6 @@ def read_fai(filename: str, contigs: List[str]) -> Dict[str, FaiLine]:
                 fai_index[cols[0]] = FaiLine(cols[0],
                                              *[int(x) for x in cols[1:]])
     return fai_index
-
-
-fai_index = read_fai(FAI_PATH, CHRS)
-print(fai_index)
 
 
 def iterate_vcf(vcf_file: TextIO, contig: str, filter: bool = True) -> Iterator[Variant]:
@@ -318,12 +305,16 @@ def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine
 
 
 if __name__ == "__main__":
-    with gzip.open(VCF_PATHS[0], mode="rt", encoding="utf-8") as vcf_file, \
+    from config import VCF_PATH_PATTERN, CONTIGS, FASTA_PATH, FAI_PATH
+
+    contig = CONTIGS[2]
+    vcf_path = VCF_PATH_PATTERN.format(contig)
+    fai_index = read_fai(FAI_PATH, CONTIGS)
+
+    with gzip.open(vcf_path, mode="rt", encoding="utf-8") as vcf_file, \
          open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
-        for contig in CHRS:
-            for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
-                # TODO: seems like it reads a few chars into the next sequence?
-                b = str(l.bases[1])
-                if l.ref_status == RS.hom_ref:
-                    b = b.lower()
-                print(b, end="")
+        for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
+            b = str(l.bases[1])
+            if l.ref_status == RS.hom_ref:
+                b = b.lower()
+            print(b, end="")
