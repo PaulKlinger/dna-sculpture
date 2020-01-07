@@ -16,6 +16,8 @@ BASE_COLORS = {
     Base.G: (209, 103, 6)
 }
 
+FALLBACK_COLOR = (30, 30, 30)
+
 
 def init_leds() -> Tuple[PixelStrip, PixelStrip]:
     pixels_strand1 = PixelStrip(N_LEDS, LED_PIN_1)
@@ -26,21 +28,23 @@ def init_leds() -> Tuple[PixelStrip, PixelStrip]:
     return (pixels_strand1, pixels_strand2)
 
 
-def iterate_dna() -> Iterator[str]:
+def iterate_dna() -> Iterator[Locus]:
     contig = CONTIGS[2]
-    vcf_path = VCF_PATH_PATTERN.format(contig)
+    vcf_path = VCF_PATH_PATTERN.format(contig=contig)
     fai_index = read_fai(FAI_PATH, CONTIGS)
-
     with gzip.open(vcf_path, mode="rt", encoding="utf-8") as vcf_file, \
          open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
-        for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
-            yield l
+        consensus_it = get_consensus_sequence(vcf_file, ref_file, fai_index[contig])
+        for l in consensus_it:
+            if l.bases[0] != Base.N:
+                break
+        yield from consensus_it
 
 
 def locus_to_colors(l: Locus) -> Tuple[Color, Color]:
     b = l.bases[1]
-    c1 = BASE_COLORS[b]
-    c2 = BASE_COLORS[INVERSE_BASES[b]]
+    c1 = BASE_COLORS.get(b, FALLBACK_COLOR)
+    c2 = BASE_COLORS.get(INVERSE_BASES.get(b, None), FALLBACK_COLOR)
 
     if l.ref_status == RefStatus.hom_ref:
         c1 = tuple(int(x * HOMREF_BRIGHTNESS_FACTOR) for x in c1)
@@ -58,7 +62,7 @@ def iterate_color_sequences() -> Iterator[List[Tuple[Color, Color]]]:
     yield res
     for e in colors_it:
         res = res[1:] + [e]
-        return res
+        yield res
 
 def run():
     strand1, strand2 = init_leds()
@@ -69,7 +73,7 @@ def run():
             strand2.setPixelColor(i, c2)
         strand1.show()
         strand2.show()
-        sleep(0.5)
+        sleep(0.1)
 
 if __name__ == "__main__":
     run()
