@@ -317,9 +317,13 @@ def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine
         yield Locus(contig, i, (ref_base, ref_base), RS.hom_ref)
 
 
-with gzip.open(VCF_PATHS[0], mode="rt", encoding="utf-8") as vcf_file, \
-        open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
-    for contig in CHRS:
-        for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
-            # TODO: seems like it reads a few chars into the next sequence?
-            pass
+if __name__ == "__main__":
+    with gzip.open(VCF_PATHS[0], mode="rt", encoding="utf-8") as vcf_file, \
+         open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
+        for contig in CHRS:
+            for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
+                # TODO: seems like it reads a few chars into the next sequence?
+                b = str(l.bases[1])
+                if l.ref_status == RS.hom_ref:
+                    b = b.lower()
+                print(b, end="")
