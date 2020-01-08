@@ -5,8 +5,6 @@ from typing import Dict, List, Tuple, TextIO, BinaryIO, Iterator, NamedTuple
 import logging
 from itertools import zip_longest
 
-logger = logging.getLogger()
-logger.setLevel("WARN")
 
 class EnumNameOnly(Enum):
     def __repr__(self):
@@ -103,7 +101,7 @@ class Variant(NamedTuple):
     qual: quality score
     filter: 'PASS' if valid
     info: info column
-    gt: inferred genotype 0/0 homozygous ref, 0/1 heterozygous, 1/1 homozygous alt
+    gt: inferred genotype (0, 0) homozygous ref, (0, 1) heterozygous, (1, 1) homozygous alt
     pl: phred scaled probability of each genotype in order above (lower is more likely)
     """
     contig: str
@@ -182,7 +180,7 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
     variants.sort(key=lambda v: -v.qual)
 
     if len(variants) > 2:
-        logger.warning(
+        logging.warning(
             f"{len(variants)} variant calls at {contig}:{i}, dropping lowest quality non-SNP!")
         new_vs = []
         to_drop = len(variants) - 2
@@ -192,7 +190,7 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
                 continue
             new_vs.append(v)
         if len(variants) > 2:
-            logger.error(
+            logging.error(
                 f"{len(variants)} SNP variant calls at {contig}:{i}???")
         # if there were no non-SNPs drop lowest quality SNPs (should never happen).
         variants = new_vs[:2]
@@ -212,21 +210,21 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
             #       appears in exactly 50% of reads! Unfortunately we throw the insert away
             #       here even though it's clearly real.
             #       Probably best to fix this when calling, not in post
-            logger.warning(
+            logging.warning(
                 f"{contig}:{i} One of 2 variant calls not heterozygous, dropping indel!")
             variants = [v for v in variants if v.type == VT.SNP]
         else:
-            logger.warning(
+            logging.warning(
                 f"{contig}:{i} One of 2 variant calls not heterozygous, dropping lowest quality!")
             variants = variants[:1]
 
     return variants
 
 
-def iterate_ref(ref_file: TextIO, fai_line: FaiLine) -> Iterator[Tuple[int, Base]]:
+def iterate_ref(ref_file: TextIO, fai_line: FaiLine, start_pos: int=0) -> Iterator[Tuple[int, Base]]:
     contig = fai_line.contig
-    ref_file.seek(fai_line.start)
-    i = 0
+    ref_file.seek(fai_line.start + start_pos // fai_line.bapl * fai_line.bypl + start_pos % fai_line.bapl)
+    i = start_pos
     valid_bases = frozenset(base_to_enum.keys())
     for line in ref_file:
         for c in line.strip():
@@ -237,21 +235,26 @@ def iterate_ref(ref_file: TextIO, fai_line: FaiLine) -> Iterator[Tuple[int, Base
                 i += 1
                 yield i, base_to_enum[c]
             elif c == ">":
-                logger.warning(
+                logging.warning(
                     f"{contig}:{i} Contig ended prematurely, expected {fai_line.len} bases, got {i}.")
                 return
             else:
-                logger.error(f"{contig}:{i} Invalid char '{c}' in fasta")
+                logging.error(f"{contig}:{i} Invalid char '{c}' in fasta")
 
 
-def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine) -> Iterator[Locus]:
+def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine,
+                           start_pos: int=0) -> Iterator[Locus]:
     contig = fai_line.contig
     vcf_iter = iterate_vcf(vcf_file, contig)
     next_variant = next(vcf_iter, None)
+    # TODO: Need to binary search for variant file start
+    logging.info("Searching for start_pos in variant file")
+    for next_variant in vcf_iter:
+        if next_variant.pos >= start_pos:
+            break
+    logging.info("Found position, starting iteration")
 
-    reference = iterate_ref(ref_file, fai_line)
-
-    print(fai_line)
+    reference = iterate_ref(ref_file, fai_line, start_pos)
 
     n_diffs = 0
     for i, ref_base in reference:
@@ -268,7 +271,7 @@ def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine
 
             for v in variants:
                 if v.ref[0] != ref_base:
-                    logger.error(
+                    logging.error(
                         f"{contig}:{i} Difference between VCF ref ({v.ref[0]}) and fasta ref ({ref_base})")
 
             variants = filter_variants(variants, contig, i)
