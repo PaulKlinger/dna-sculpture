@@ -52,6 +52,8 @@ class DNAIterator(object):
             logging.info("starting iteration from {}:{}".format(contig, start_pos))
             consensus_it = get_consensus_sequence(self.vcf_paths[contig], ref_file, self.fai_index[contig], start_pos)
             if skip_start_invalid:
+                # TODO: this should probably be replaced with a binary search in get_consensus_sequence
+                #       as e.g. at the beginning of chr15 there are 1.7E7 invalid bases
                 logging.info("skipping invalids")
                 for l in consensus_it:
                     if l.bases[1] in (Base.A, Base.C, Base.T, Base.G):
@@ -94,7 +96,7 @@ def update_screen(display: adafruit_ssd1306.SSD1306_I2C, loci: List[Locus]) -> N
     display.show()
 
 
-def run():
+def run() -> None:
     strand1, strand2 = init_leds()
     display = init_screen()
     dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)

@@ -1,17 +1,18 @@
 import gzip
 from collections import namedtuple
 from enum import Enum
-from typing import Dict, List, Tuple, TextIO, BinaryIO, Iterator, NamedTuple, Union
+from typing import (Dict, List, Tuple, TextIO, BinaryIO,
+                    Iterator, NamedTuple, Union, Iterable)
 import logging
 from itertools import zip_longest
 from io import SEEK_END, SEEK_SET
 
 
 class EnumNameOnly(Enum):
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -131,7 +132,7 @@ bypl: # of bytes per line
 """
 
 
-def read_fai(filename: str, contigs: List[str]) -> Dict[str, FaiLine]:
+def read_fai(filename: str, contigs: Iterable[str]) -> Dict[str, FaiLine]:
     fai_index = {}
 
     with open(filename, encoding="utf-8") as f:
@@ -154,7 +155,7 @@ class VCFFile(object):
             self._search_for_pos(f, pos)
             yield from self._iterate_vcf(f)
 
-    def _search_for_pos(self, file: BinaryIO, pos: int):
+    def _search_for_pos(self, file: BinaryIO, pos: int) -> None:
         """
         Binary search through the VCF file to find the position of
         the next variant call after pos
@@ -219,13 +220,12 @@ class VCFFile(object):
                     filter=cols[6], info=cols[7], gt=gt, pl=pl)
         return v
 
-    def _iterate_vcf(self, file: BinaryIO):
+    def _iterate_vcf(self, file: BinaryIO) -> Iterator[Variant]:
         while True:
             line = file.readline()
             if not line:
                 break
-            line = line.decode("ascii")
-            v = self._parse_vcf_line(line)
+            v = self._parse_vcf_line(line.decode("ascii"))
             if v is None or (self.filter_status and v.filter != "PASS"):
                 continue
             yield v
@@ -235,7 +235,7 @@ class InvalidVariantsError(ValueError):
     pass
 
 
-def filter_variants(variants: List[Variant], contig: str, i: int):
+def filter_variants(variants: List[Variant], contig: str, i: int) -> List[Variant]:
     """
     This tries to filter out incompatible calls, assuming everything should be diploid
     This is sort of useless as we only display one sequence anyway
@@ -375,9 +375,8 @@ if __name__ == "__main__":
     vcf_path = VCF_PATH_PATTERN.format(contig)
     fai_index = read_fai(FAI_PATH, CONTIGS)
 
-    with open(vcf_path, mode="r", encoding="utf-8") as vcf_file, \
-            open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
-        for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
+    with open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
+        for l in get_consensus_sequence(vcf_path, ref_file, fai_index[contig]):
             b = str(l.bases[1])
             if l.ref_status == RS.hom_ref:
                 b = b.lower()
