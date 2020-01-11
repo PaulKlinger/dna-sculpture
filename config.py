@@ -1,7 +1,7 @@
 FASTA_PATH = "./data/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna"
 FAI_PATH = "./data/GCA_000001405.15_GRCh38_no_alt_plus_hs38d1_analysis_set.fna.fai"
 
-VCF_PATH_PATTERN = "./data/grch38_calls_filtered_{contig}.vcf.gz"
+VCF_PATH_PATTERN = "./data/grch38_calls_filtered_{contig}.vcf"
 
 CONTIGS = ["chr{}".format(i) for i in range(1,23)] + ["chrX", "chrY", "chrM"]
 

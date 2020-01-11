@@ -314,7 +314,7 @@ if __name__ == "__main__":
     vcf_path = VCF_PATH_PATTERN.format(contig)
     fai_index = read_fai(FAI_PATH, CONTIGS)
 
-    with gzip.open(vcf_path, mode="rt", encoding="utf-8") as vcf_file, \
+    with open(vcf_path, mode="r", encoding="utf-8") as vcf_file, \
          open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
         for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
             b = str(l.bases[1])

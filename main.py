@@ -6,7 +6,6 @@ import adafruit_ssd1306
 from time import sleep
 from typing import Iterator, Any, Tuple, List, Dict
 from itertools import islice
-import gzip
 import random
 import logging
 
@@ -49,7 +48,7 @@ class DNAIterator(object):
         self.vcf_paths = vcf_paths
     
     def iterate_loci(self, contig: str, start_pos: int, skip_start_invalid: bool=True) -> Iterator[Locus]:
-        with gzip.open(self.vcf_paths[contig], mode="rt", encoding="utf-8") as vcf_file, \
+        with open(self.vcf_paths[contig], mode="r", encoding="utf-8") as vcf_file, \
          open(self.ref_path, mode="r", encoding="utf-8") as ref_file:
             logging.info("starting iteration from {}:{}".format(contig, start_pos))
             consensus_it = get_consensus_sequence(vcf_file, ref_file, self.fai_index[contig], start_pos)
