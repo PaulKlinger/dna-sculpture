@@ -59,26 +59,6 @@ class Screen(object):
         self.display.show()
 
 
-def launch_display_thread(q: mp.Queue) -> None:
-    screen = Screen()
-    item = None
-    while True:
-        try:
-            # get the last item in the queue
-            # (display update is slow so we might skip some entries)
-            while True:
-                item = q.get_nowait()
-        except queue.Empty:
-            pass
-
-        if isinstance(item, str):
-            screen.show_message(item)
-        elif isinstance(item, list):
-            screen.update_screen(item)
-        else:
-            logging.error("Unknown message received in display process!")
-
-
 class DNAIterator(object):
     def __init__(self, ref_path: str, contigs: List[str], vcf_paths: Dict[str, str], fai_path: str):
         self.fai_index = read_fai(fai_path, vcf_paths.keys())
@@ -133,18 +113,16 @@ def iterate_sliding(source_it: Iterator[Any], n: int) -> Iterator[List[Any]]:
 
 def run() -> None:
     strand1, strand2 = init_leds()
-    display_queue = mp.Queue()
-    p = mp.Process(target=launch_display_thread, args=(display_queue,))
-    p.start()
+    display = Screen()
 
-    display_queue.put("Loading DNA data...")
+    display.show_message("Loading DNA data...")
     dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)
 
     while True:
         random_iter = dna_iterator.iterate_from_random(skip_start_invalid=True)
         t0 = perf_counter()
         for seq in iterate_sliding(random_iter, N_BASES_DISPLAYED):
-            display_queue.put(seq)
+            display.update_screen(seq)
             for i, l in enumerate(seq[:N_LEDS]):
                 c1, c2 = locus_to_colors(l)
                 strand1.setPixelColor(i, c1)
@@ -163,7 +141,7 @@ def run() -> None:
             t0 = perf_counter()
             if random.random() < JUMP_PROB:
                 logging.info("Jumping to new location")
-                display_queue.put("Jumping to new location...")
+                display.show_message("Jumping to new location...")
                 break
 
 
