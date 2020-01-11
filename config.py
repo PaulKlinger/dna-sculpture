@@ -12,6 +12,8 @@ LED_PIN_1 = 18
 LED_PIN_2 = 13
 HOMREF_BRIGHTNESS_FACTOR = 0.1
 
+
+N_BASES_DISPLAYED = 20
 JUMP_PROB = 1 / 10000 # probability of jumping to a new location after each base
 BASES_PER_SECOND = 60
 BASES_PER_SECOND_DIFF = 2
