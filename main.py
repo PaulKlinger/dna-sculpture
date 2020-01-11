@@ -8,6 +8,8 @@ from typing import Iterator, Any, Tuple, List, Dict
 from itertools import islice
 import random
 import logging
+import multiprocessing as mp
+import queue
 
 from dna import get_consensus_sequence, Locus, Base, RefStatus, read_fai, INVERSE_BASES
 from config import (VCF_PATHS, CONTIGS, FASTA_PATH, FAI_PATH,
@@ -55,6 +57,26 @@ class Screen(object):
         self.display.fill(0)
         self.display.text(message, 10, 15, 1)
         self.display.show()
+
+
+def launch_display_thread(q: mp.Queue) -> None:
+    screen = Screen()
+    item = None
+    while True:
+        try:
+            # get the last item in the queue
+            # (display update is slow so we might skip some entries)
+            while True:
+                item = q.get_nowait()
+        except queue.Empty:
+            pass
+
+        if isinstance(item, str):
+            screen.show_message(item)
+        elif isinstance(item, list):
+            screen.update_screen(item)
+        else:
+            logging.error("Unknown message received in display process!")
 
 
 class DNAIterator(object):
@@ -111,15 +133,18 @@ def iterate_sliding(source_it: Iterator[Any], n: int) -> Iterator[List[Any]]:
 
 def run() -> None:
     strand1, strand2 = init_leds()
-    display = Screen()
-    display.show_message("Loading DNA data...")
+    display_queue = mp.Queue()
+    p = mp.Process(target=launch_display_thread, args=(display_queue,))
+    p.start()
+
+    display_queue.put("Loading DNA data...")
     dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)
 
     while True:
         random_iter = dna_iterator.iterate_from_random(skip_start_invalid=True)
         t0 = perf_counter()
         for seq in iterate_sliding(random_iter, N_BASES_DISPLAYED):
-            display.update_screen(seq)
+            display_queue.put(seq)
             for i, l in enumerate(seq[:N_LEDS]):
                 c1, c2 = locus_to_colors(l)
                 strand1.setPixelColor(i, c1)
@@ -128,17 +153,17 @@ def run() -> None:
             strand2.show()
 
             t1 = perf_counter()
+            tdiff = t1 - t0
             if all(l.ref_status == RefStatus.hom_ref for l in seq[:N_LEDS]):
-                tdiff = (t1 - t0)
                 if tdiff > 1 / BASES_PER_SECOND:
                     logging.warning(f"Took {tdiff}s / base!")
-                sleep(max(1 / BASES_PER_SECOND - (t1 - t0), 0))
+                sleep(max(1 / BASES_PER_SECOND - tdiff, 0))
             else:
-                sleep(max(1 / BASES_PER_SECOND_DIFF - (t1 - t0), 0))
-            t0 = t1
+                sleep(max(1 / BASES_PER_SECOND_DIFF - tdiff, 0))
+            t0 = perf_counter()
             if random.random() < JUMP_PROB:
                 logging.info("Jumping to new location")
-                display.show_message("Jumping to new location...")
+                display_queue.put("Jumping to new location...")
                 break
 
 
