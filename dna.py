@@ -65,7 +65,8 @@ RS = RefStatus
 
 gt_to_ref_status = {
     (0, 0): RS.hom_ref, (0, 1): RS.het_mix, (1, 1): RS.hom_alt,
-    (1, 2): RS.het_alt, (2, 2): RS.hom_alt
+    (1, 2): RS.het_alt, (2, 2): RS.hom_alt,
+    (0,): RS.hom_ref, (1,): RS.hom_alt
 }
 
 
@@ -350,6 +351,9 @@ def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
                 yield Locus(contig, i, bases, gt_to_ref_status[variant.gt])
             else:
                 ref_alts = [variant.ref] + variant.alts
+                if len(variant.gt) == 1:
+                    # for chr x/y/m (ugly...)
+                    variant.gt = (variant_gt[0], variant_gt[0])
                 for b1, b2 in zip_longest(*(ref_alts[vi] for vi in variant.gt), fillvalue=B.X):
                     yield Locus(contig, i, (b1, b2), gt_to_ref_status[variant.gt])
 
