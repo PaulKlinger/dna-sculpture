@@ -3,7 +3,7 @@ from rpi_ws281x import ws, Color, PixelStrip
 import busio
 import adafruit_ssd1306
 
-from time import sleep
+from time import sleep, perf_counter
 from typing import Iterator, Any, Tuple, List, Dict
 from itertools import islice
 import random
@@ -53,7 +53,7 @@ class Screen(object):
 
     def show_message(self, message: str) -> None:
         self.display.fill(0)
-        self.display.text(message, 10, 15)
+        self.display.text(message, 10, 15, 1)
         self.display.show()
 
 
@@ -117,6 +117,7 @@ def run() -> None:
 
     while True:
         random_iter = dna_iterator.iterate_from_random(skip_start_invalid=True)
+        t0 = perf_counter()
         for seq in iterate_sliding(random_iter, N_BASES_DISPLAYED):
             display.update_screen(seq)
             for i, l in enumerate(seq[:N_LEDS]):
@@ -125,11 +126,18 @@ def run() -> None:
                 strand2.setPixelColor(i, c2)
             strand1.show()
             strand2.show()
+
+            t1 = perf_counter()
             if all(l.ref_status == RefStatus.hom_ref for l in seq[:N_LEDS]):
-                sleep(1 / BASES_PER_SECOND)
+                tdiff = (t1 - t0)
+                if tdiff > 1 / BASES_PER_SECOND:
+                    logging.warning(f"Took {tdiff}s / base!")
+                sleep(max(1 / BASES_PER_SECOND - (t1 - t0), 0))
             else:
-                sleep(1 / BASES_PER_SECOND_DIFF)
+                sleep(max(1 / BASES_PER_SECOND_DIFF - (t1 - t0), 0))
+            t0 = t1
             if random.random() < JUMP_PROB:
+                logging.info("Jumping to new location")
                 display.show_message("Jumping to new location...")
                 break
 
