@@ -1,9 +1,10 @@
 import gzip
 from collections import namedtuple
 from enum import Enum
-from typing import Dict, List, Tuple, TextIO, BinaryIO, Iterator, NamedTuple
+from typing import Dict, List, Tuple, TextIO, BinaryIO, Iterator, NamedTuple, Union
 import logging
 from itertools import zip_longest
+from io import SEEK_END, SEEK_SET
 
 
 class EnumNameOnly(Enum):
@@ -43,6 +44,7 @@ base_to_enum = {"N": Base.N, "A": Base.A,
                 "V": Base.V}
 
 INVERSE_BASES = {B.A: B.T, B.T: B.A, B.C: B.G, B.G: B.C}
+
 
 class Genotype(EnumNameOnly):
     g00 = 0
@@ -141,13 +143,66 @@ def read_fai(filename: str, contigs: List[str]) -> Dict[str, FaiLine]:
     return fai_index
 
 
-def iterate_vcf(vcf_file: TextIO, contig: str, filter: bool = True) -> Iterator[Variant]:
-    for line in vcf_file:
-        if not line.startswith(contig):
-            continue
+class VCFFile(object):
+    def __init__(self, filename: str, contig: str, filter_status: bool = True):
+        self.filename = filename
+        self.contig = contig
+        self.filter_status = filter_status
+
+    def iterate_from_pos(self, pos: int) -> Iterator[Variant]:
+        with open(self.filename, "rb") as f:
+            self._search_for_pos(f, pos)
+            yield from self._iterate_vcf(f)
+
+    def _search_for_pos(self, file: BinaryIO, pos: int):
+        """
+        Binary search through the VCF file to find the position of
+        the next variant call after pos
+        """
+        logging.info(
+            f"Starting binary search for next variant after {self.contig}:{pos} in {self.filename}")
+
+        file_length = file.seek(0, SEEK_END)
+        file.seek(0)
+
+        lower = 0
+        upper = file_length
+        new_pos = None
+
+        while lower < upper:
+            file.seek(lower + (upper - lower) // 2)
+            file.readline()  # skip to next complete line
+            new_pos = file.tell()
+            if new_pos == upper:
+                break
+
+            line = file.readline().decode("ascii")
+            if line is None:
+                # we reached the end of the file
+                upper = new_pos
+                continue
+
+            v = self._parse_vcf_line(line)
+            # assuming that invalid lines only occur at the beginning
+            # hopefully that's true...
+            if v is None or v.pos < pos:
+                lower = new_pos
+            else:
+                upper = new_pos
+
+            logging.debug(f"{self.contig}:{lower}-{upper}")
+
+        file.seek(upper)
+        logging.info(
+            f"Found next variant.")
+
+    def _parse_vcf_line(self, line: str) -> Union[Variant, None]:
+        if not line.startswith(self.contig):
+            return None
         cols = line.strip().split("\t")
         ref = [base_to_enum[c] for c in cols[3]]
         alts = [[base_to_enum[c] for c in cs] for cs in cols[4].split(",")]
+
         if len(ref) == 1 and all(len(a) == 1 for a in alts):
             v_type = VT.SNP
         elif len(ref) == 1 and all(len(a) > 1 for a in alts):
@@ -156,14 +211,24 @@ def iterate_vcf(vcf_file: TextIO, contig: str, filter: bool = True) -> Iterator[
             v_type = VT.DEL
         else:
             v_type = VT.OTHER
+
         gt, pl = cols[-1].split(":")
         gt = tuple(int(gi) for gi in gt.split("/"))
         v = Variant(contig=cols[0], pos=int(cols[1]), type=v_type,
                     ref=ref, alts=alts, qual=float(cols[5]),
                     filter=cols[6], info=cols[7], gt=gt, pl=pl)
-        if filter and v.filter != "PASS":
-            continue
-        yield v
+        return v
+
+    def _iterate_vcf(self, file: BinaryIO):
+        while True:
+            line = file.readline()
+            if not line:
+                break
+            line = line.decode("ascii")
+            v = self._parse_vcf_line(line)
+            if v is None or (self.filter_status and v.filter != "PASS"):
+                continue
+            yield v
 
 
 class InvalidVariantsError(ValueError):
@@ -221,9 +286,10 @@ def filter_variants(variants: List[Variant], contig: str, i: int):
     return variants
 
 
-def iterate_ref(ref_file: TextIO, fai_line: FaiLine, start_pos: int=0) -> Iterator[Tuple[int, Base]]:
+def iterate_ref(ref_file: TextIO, fai_line: FaiLine, start_pos: int = 0) -> Iterator[Tuple[int, Base]]:
     contig = fai_line.contig
-    ref_file.seek(fai_line.start + start_pos // fai_line.bapl * fai_line.bypl + start_pos % fai_line.bapl)
+    ref_file.seek(fai_line.start + start_pos // fai_line.bapl *
+                  fai_line.bypl + start_pos % fai_line.bapl)
     i = start_pos
     valid_bases = frozenset(base_to_enum.keys())
     for line in ref_file:
@@ -242,17 +308,12 @@ def iterate_ref(ref_file: TextIO, fai_line: FaiLine, start_pos: int=0) -> Iterat
                 logging.error(f"{contig}:{i} Invalid char '{c}' in fasta")
 
 
-def get_consensus_sequence(vcf_file: TextIO, ref_file: TextIO, fai_line: FaiLine,
-                           start_pos: int=0) -> Iterator[Locus]:
+def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
+                           start_pos: int = 0) -> Iterator[Locus]:
     contig = fai_line.contig
-    vcf_iter = iterate_vcf(vcf_file, contig)
-    next_variant = next(vcf_iter, None)
-    # TODO: Need to binary search for variant file start
-    logging.info("Searching for start_pos in variant file")
-    for next_variant in vcf_iter:
-        if next_variant.pos >= start_pos:
-            break
-    logging.info("Found position, starting iteration")
+    vcf_file = VCFFile(vcf_path, contig, filter_status=True)
+    vcf_iter = vcf_file.iterate_from_pos(start_pos)
+    next_variant = next(vcf_iter)
 
     reference = iterate_ref(ref_file, fai_line, start_pos)
 
@@ -315,7 +376,7 @@ if __name__ == "__main__":
     fai_index = read_fai(FAI_PATH, CONTIGS)
 
     with open(vcf_path, mode="r", encoding="utf-8") as vcf_file, \
-         open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
+            open(FASTA_PATH, mode="r", encoding="utf-8") as ref_file:
         for l in get_consensus_sequence(vcf_file, ref_file, fai_index[contig]):
             b = str(l.bases[1])
             if l.ref_status == RS.hom_ref:

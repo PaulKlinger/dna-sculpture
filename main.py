@@ -48,10 +48,9 @@ class DNAIterator(object):
         self.vcf_paths = vcf_paths
     
     def iterate_loci(self, contig: str, start_pos: int, skip_start_invalid: bool=True) -> Iterator[Locus]:
-        with open(self.vcf_paths[contig], mode="r", encoding="utf-8") as vcf_file, \
-         open(self.ref_path, mode="r", encoding="utf-8") as ref_file:
+        with open(self.ref_path, mode="r", encoding="utf-8") as ref_file:
             logging.info("starting iteration from {}:{}".format(contig, start_pos))
-            consensus_it = get_consensus_sequence(vcf_file, ref_file, self.fai_index[contig], start_pos)
+            consensus_it = get_consensus_sequence(self.vcf_paths[contig], ref_file, self.fai_index[contig], start_pos)
             if skip_start_invalid:
                 logging.info("skipping invalids")
                 for l in consensus_it:
@@ -118,5 +117,5 @@ def run():
                 break
 
 if __name__ == "__main__":
-    logging.basicConfig(level="INFO")
+    logging.basicConfig(level="DEBUG")
     run()
