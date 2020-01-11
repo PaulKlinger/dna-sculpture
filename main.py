@@ -112,6 +112,7 @@ def iterate_sliding(source_it: Iterator[Any], n: int) -> Iterator[List[Any]]:
 def run() -> None:
     strand1, strand2 = init_leds()
     display = Screen()
+    display.show_message("Loading DNA data...")
     dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)
 
     while True:
@@ -129,6 +130,7 @@ def run() -> None:
             else:
                 sleep(1 / BASES_PER_SECOND_DIFF)
             if random.random() < JUMP_PROB:
+                display.show_message("Jumping to new location...")
                 break
 
 
