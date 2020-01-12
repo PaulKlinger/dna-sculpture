@@ -15,6 +15,7 @@ from dna import get_consensus_sequence, Locus, Base, RefStatus, read_fai, INVERS
 from config import (VCF_PATHS, CONTIGS, FASTA_PATH, FAI_PATH,
                     N_LEDS, LED_PIN_1, LED_PIN_2, HOMREF_BRIGHTNESS_FACTOR,
                     BASES_PER_SECOND, BASES_PER_SECOND_DIFF, JUMP_PROB, N_BASES_DISPLAYED)
+from minimal_disp_replacements import MinimalMemoryFont
 
 
 BASE_COLORS = {
@@ -42,6 +43,9 @@ class Screen(object):
         self.display: adafruit_ssd1306.SSD1306_I2C = adafruit_ssd1306.SSD1306_I2C(
             128, 64, i2c)
         self.display.rotation = 2
+
+        # replace the font class with a less complicated faster one
+        self.display._font = MinimalMemoryFont()
 
     def update_screen(self, loci: List[Locus]) -> None:
         self.display.fill(0)
