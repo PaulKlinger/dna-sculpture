@@ -70,27 +70,24 @@ class DNAIterator(object):
         self.ref_path = ref_path
         self.vcf_paths = vcf_paths
 
-    def iterate_loci(self, contig: str, start_pos: int, skip_start_invalid: bool = True) -> Iterator[Locus]:
+    def iterate_loci(self, contig: str, start_pos: int) -> Iterator[Locus]:
         with open(self.ref_path, mode="r", encoding="utf-8") as ref_file:
             logging.info(
                 "starting iteration from {}:{}".format(contig, start_pos))
             consensus_it = get_consensus_sequence(
                 self.vcf_paths[contig], ref_file, self.fai_index[contig], start_pos)
-            if skip_start_invalid:
-                # TODO: this should probably be replaced with a binary search in get_consensus_sequence
-                #       as e.g. at the beginning of chr15 there are 1.7E7 invalid bases
-                logging.info("skipping invalids")
-                for l in consensus_it:
-                    if l.bases[1] in (Base.A, Base.C, Base.T, Base.G):
-                        logging.info("reached valid bases")
-                        break
             yield from consensus_it
 
-    def iterate_from_random(self, skip_start_invalid: bool = True) -> Iterator[Locus]:
+    def iterate_from_random(self, redraw_invalid_start: bool = True) -> Iterator[Locus]:
         contig = random.choice(self.contigs)
-        start_pos = random.randint(0, self.fai_index[contig].len)
-
-        yield from self.iterate_loci(contig, start_pos, skip_start_invalid)
+        while True:
+            start_pos = random.randint(0, self.fai_index[contig].len)
+            l_it = self.iterate_loci(contig, start_pos)
+            first_base = next(l_it)
+            if not first_base.bases[1] in (Base.A, Base.G, Base.T, Base.C):
+                continue
+            yield first_base
+            yield from l_it
 
 
 def locus_to_colors(l: Locus) -> Tuple[Color, Color]:
@@ -123,7 +120,7 @@ def run() -> None:
     dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)
 
     while True:
-        random_iter = dna_iterator.iterate_from_random(skip_start_invalid=True)
+        random_iter = dna_iterator.iterate_from_random(redraw_invalid_start=True)
         t0 = perf_counter()
         for seq in iterate_sliding(random_iter, N_BASES_DISPLAYED):
             display.update_screen(seq)
