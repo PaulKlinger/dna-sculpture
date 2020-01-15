@@ -344,6 +344,10 @@ def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
             # TODO: use multiple variants where it makes sense
             # e.g. at chr1:50156031 it's pretty clear that it's heterozygous
             # with an insertion on the reference chromosome
+            
+            if len(variant.gt) == 1:
+                # for chr x/y/m (ugly...)
+                variant.gt = (variant.gt[0], variant.gt[0])
 
             if variant.type == VT.SNP:
                 base_options = variant.ref + sum(variant.alts, [])
@@ -351,9 +355,7 @@ def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
                 yield Locus(contig, i, bases, gt_to_ref_status[variant.gt])
             else:
                 ref_alts = [variant.ref] + variant.alts
-                if len(variant.gt) == 1:
-                    # for chr x/y/m (ugly...)
-                    variant.gt = (variant_gt[0], variant_gt[0])
+                
                 for b1, b2 in zip_longest(*(ref_alts[vi] for vi in variant.gt), fillvalue=B.X):
                     yield Locus(contig, i, (b1, b2), gt_to_ref_status[variant.gt])
 
