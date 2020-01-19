@@ -347,7 +347,7 @@ def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
             
             if len(variant.gt) == 1:
                 # for chr x/y/m (ugly...)
-                variant.gt = (variant.gt[0], variant.gt[0])
+                variant = variant._replace(gt=(variant.gt[0], variant.gt[0]))
 
             if variant.type == VT.SNP:
                 base_options = variant.ref + sum(variant.alts, [])
