@@ -53,8 +53,8 @@ class Screen(object):
             loci[0].contig, loci[0].pos), 0, 0, 1)
         self.display.text("_" * N_LEDS, 0, 10, 1)
         self.display.text("".join(str(l.bases[1]) for l in loci), 0, 20, 1)
-        self.display.text("".join(" " if l.ref_status ==
-                                  RefStatus.hom_ref else "^" for l in loci), 0, 30, 1)
+        self.display.text("".join(" " if l.ref_base == l.bases[1]
+                                  else str(l.ref_base) for l in loci), 0, 30, 1)
         self.display.show()
 
     def show_message(self, message: str) -> None:

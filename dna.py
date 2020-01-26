@@ -81,6 +81,7 @@ class Locus(NamedTuple):
     pos: int
     bases: Tuple[Base, Base]
     ref_status: RefStatus
+    ref_base: Base
 
 
 class VariantType(EnumNameOnly):
@@ -352,12 +353,13 @@ def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
             if variant.type == VT.SNP:
                 base_options = variant.ref + sum(variant.alts, [])
                 bases = tuple(base_options[bi] for bi in variant.gt)
-                yield Locus(contig, i, bases, gt_to_ref_status[variant.gt])
+                yield Locus(contig, i, bases, gt_to_ref_status[variant.gt], ref_base=ref_base)
             else:
                 ref_alts = [variant.ref] + variant.alts
                 
-                for b1, b2 in zip_longest(*(ref_alts[vi] for vi in variant.gt), fillvalue=B.X):
-                    yield Locus(contig, i, (b1, b2), gt_to_ref_status[variant.gt])
+                for b1, b2, ref_base_ in zip_longest(*(ref_alts[vi] for vi in variant.gt),
+                                                     variant.ref, fillvalue=B.X):
+                    yield Locus(contig, i, (b1, b2), gt_to_ref_status[variant.gt], ref_base=ref_base_)
 
                 # we yield from the sequence in the variant, so we need
                 # to skip the corresponding bases in the reference
@@ -371,7 +373,7 @@ def get_consensus_sequence(vcf_path: str, ref_file: TextIO, fai_line: FaiLine,
 
             continue
 
-        yield Locus(contig, i, (ref_base, ref_base), RS.hom_ref)
+        yield Locus(contig, i, (ref_base, ref_base), RS.hom_ref, ref_base=ref_base)
 
 
 if __name__ == "__main__":
