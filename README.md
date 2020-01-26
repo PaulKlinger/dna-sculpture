@@ -1,4 +1,4 @@
-# RPS-RNN
+# DNA Sculpture
 
 [![](video_link_image.jpg)](https://youtu.be/C1H_zHTX7Ds "Project video")
 
