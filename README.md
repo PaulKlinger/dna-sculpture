@@ -2,6 +2,8 @@
 
 [![](video_link_image.jpg)](https://youtu.be/C1H_zHTX7Ds "Project video")
 
+There are some in-progress photos of the build [here](https://imgur.com/a/wToFaz0).
+
 ## DNA
 I had my DNA sequenced by [dantelabs.com](https://www.dantelabs.com/) (the 30X whole genome sequencing). They provide fastq, aligned bam, and vcf files, but just to understand some more about the process I redid the alignment with [bwa](https://github.com/lh3/bwa) and the variant calling with [bcftools](https://github.com/samtools/bcftools). (There are some issues with the called variants, see comments in dna.py, but that doesn't really matter for this project.) I've released the vcf files as creative commons, they are available [here](https://almoturg.com/paul_klinger_vcf_grch38.zip). Once I figure out a cheap way to share a 34 GiB file I'll put the bam up as well...
 
