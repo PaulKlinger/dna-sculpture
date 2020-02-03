@@ -2,13 +2,14 @@ import board
 from rpi_ws281x import ws, Color, PixelStrip
 import busio
 import adafruit_ssd1306
+import gpiozero
 
 from time import sleep, perf_counter
 from typing import Iterator, Any, Tuple, List, Dict
 from itertools import islice
 import random
 import logging
-import multiprocessing as mp
+from subprocess import check_call
 import queue
 
 from dna import get_consensus_sequence, Locus, Base, RefStatus, read_fai, INVERSE_BASES
@@ -26,15 +27,6 @@ BASE_COLORS = {
 }
 
 FALLBACK_COLOR = (30, 30, 30)
-
-
-def init_leds() -> Tuple[PixelStrip, PixelStrip]:
-    pixels_strand1 = PixelStrip(N_LEDS, LED_PIN_1)
-    pixels_strand2 = PixelStrip(N_LEDS, LED_PIN_2, channel=1)
-
-    pixels_strand1.begin()
-    pixels_strand2.begin()
-    return (pixels_strand1, pixels_strand2)
 
 
 class Screen(object):
@@ -55,12 +47,21 @@ class Screen(object):
         self.display.text("".join(str(l.bases[1]) for l in loci), 0, 20, 1)
         self.display.text("".join(" " if l.ref_base == l.bases[1]
                                   else str(l.ref_base) for l in loci), 0, 30, 1)
-        self.display.show()
+        self._show()
 
     def show_message(self, message: str) -> None:
         self.display.fill(0)
         self.display.text(message, 10, 15, 1)
-        self.display.show()
+        self._show()
+
+    def _show(self) -> None:
+        # When the button is pressed this also pulls down the I2C clock line
+        # as this is the only pin that can wake the Pi up from halt.
+        # This shouldn't matter, as when the button is pressed we shut down anyway.
+        try:
+            self.display.show()
+        except OSError:
+            logging.warning("Display comm error. Button pressed?")
 
 
 class DNAIterator(object):
@@ -112,40 +113,75 @@ def iterate_sliding(source_it: Iterator[Any], n: int) -> Iterator[List[Any]]:
         yield res
 
 
-def run() -> None:
-    strand1, strand2 = init_leds()
-    display = Screen()
+class DNASculpture(object):
+    def __init__(self):
+        self.init_leds()
+        self.display = Screen()
+        self.button = gpiozero.Button(4, bounce_time=0.05)
+        self.button.when_released = self.shutdown
+        self.running = False
 
-    display.show_message("Loading DNA data...")
-    dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)
+    def init_leds(self) -> None:
+        self.strand1 = PixelStrip(N_LEDS, LED_PIN_1)
+        self.strand2 = PixelStrip(N_LEDS, LED_PIN_2, channel=1)
 
-    while True:
-        random_iter = dna_iterator.iterate_from_random(redraw_invalid_start=True)
-        t0 = perf_counter()
-        for seq in iterate_sliding(random_iter, N_BASES_DISPLAYED):
-            display.update_screen(seq)
-            for i, l in enumerate(seq[:N_LEDS]):
-                c1, c2 = locus_to_colors(l)
-                strand1.setPixelColor(i, c1)
-                strand2.setPixelColor(i, c2)
-            strand1.show()
-            strand2.show()
+        self.strand1.begin()
+        self.strand2.begin()
 
-            t1 = perf_counter()
-            tdiff = t1 - t0
-            if all(l.ref_status == RefStatus.hom_ref for l in seq[:N_LEDS]):
-                if tdiff > 1 / BASES_PER_SECOND:
-                    logging.warning(f"Took {tdiff}s / base!")
-                sleep(max(1 / BASES_PER_SECOND - tdiff, 0))
-            else:
-                sleep(max(1 / BASES_PER_SECOND_DIFF - tdiff, 0))
+    def shutdown(self) -> None:
+        self.running = False
+        logging.info("Shutting down")
+        sleep(1)
+        check_call(['sudo', 'poweroff'])
+        sleep(10)
+
+    def run(self) -> None:
+        self.display.show_message("Loading DNA data...")
+        dna_iterator = DNAIterator(FASTA_PATH, CONTIGS, VCF_PATHS, FAI_PATH)
+
+        self.running = True
+        while True:
+            random_iter = dna_iterator.iterate_from_random(redraw_invalid_start=True)
             t0 = perf_counter()
-            if random.random() < JUMP_PROB:
-                logging.info("Jumping to new location")
-                display.show_message("Jumping to new location...")
-                break
+            for seq in iterate_sliding(random_iter, N_BASES_DISPLAYED):
+                if not self.running:
+                    # This can't be in shutdown because the rpi_ws281x library is
+                    # not threadsafe (causes segmentation fault).
+                    for i in range(N_LEDS):
+                        self.strand1.setPixelColor(i, Color(0, 0, 0))
+                        self.strand2.setPixelColor(i, Color(0, 0, 0))
+                    self.strand1.show()
+                    self.strand2.show()
+                    
+                    while True:
+                        # I2C is broken while the button is pressed
+                        # hopefully it's released before we shut down...
+                        self.display.show_message("")
+
+                self.display.update_screen(seq)
+                for i, l in enumerate(seq[:N_LEDS]):
+                    c1, c2 = locus_to_colors(l)
+                    self.strand1.setPixelColor(i, c1)
+                    self.strand2.setPixelColor(i, c2)
+                self.strand1.show()
+                self.strand2.show()
+
+                t1 = perf_counter()
+                tdiff = t1 - t0
+                if all(l.ref_status == RefStatus.hom_ref for l in seq[:N_LEDS]):
+                    if tdiff > 1 / BASES_PER_SECOND:
+                        logging.warning(f"Took {tdiff}s / base!")
+                    sleep(max(1 / BASES_PER_SECOND - tdiff, 0))
+                else:
+                    sleep(max(1 / BASES_PER_SECOND_DIFF - tdiff, 0))
+                t0 = perf_counter()
+                if random.random() < JUMP_PROB:
+                    logging.info("Jumping to new location")
+                    self.display.show_message("Jumping to new location...")
+                    break
 
 
 if __name__ == "__main__":
     logging.basicConfig(level="DEBUG")
-    run()
+    dna = DNASculpture()
+    dna.run()
