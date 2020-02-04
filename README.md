@@ -17,7 +17,7 @@ The two parts of the case are held together with three m2 screws that screw into
 The base pairs between the two helices are printed in transparent PLA and the holes are filled with short pieces of 4mm PMMA side-glow fiberoptic. I glued a bit of aluminium foil to the end of the fiberoptic (where the two pieces meet in the middle) so the colors of the complementary bases don't mix. The base pairs are just friction fit into the helices, and the LEDs are sort-of retained by the little tabs at the end of the bases, although most of them broke off during assembly.
 
 ## Electronics & Software
-The electronics are very simple, just a raspberry pi zero w and 18 WS2812B RGB LEDS in two strings of nine.
+The electronics are very simple, just a raspberry pi zero w, 18 WS2812B RGB LEDS in two strings of nine, a momentary button (for turning it on/off) and a diode (necessary for the button due overlapping pin functions, see below).
 The LEDS are connected with some 30 AWG wire, soldered directly to them. I assembled the LEDs already inside the two helices, adding one and then pulling the cables through to the next hole. That's absolutely horrible work, I'm pretty amazed it works at all. When putting the connecting transparent parts in they put pressure on the LEDs and it's quite likely that some of the connection fail and you have to fix it in place... 
 Theoretically the WS2812B require an external capacitor (except for the new v5 version) but that would make assembly even more horrible. Thankfully it works fine without them.
 The second PCB just contains a micro usb connector and a big capacitor, I used the [same PCB as for my satellite tracker](https://github.com/PaulKlinger/satellite_tracker/tree/master/PCBs/auxiliary).
@@ -30,4 +30,13 @@ dtparam=i2c1_baudrate=800000
 ```
 to boot.config fixes this.
 
+### On/off button
+Getting both a single button for startup/shutdown and I2C (for the display) to work is a bit harder than it should be. When the RPi is shut down ("halt" state) it can only be woken up by connecting pin 3 (BCM numbering) to ground (or disconnecting and reconnecting power). But pin 3 is also the clock pin for the standard I2C port (i2c-1). Theoretically there's a second I2C, i2c-0 on pins 0/1 but I didn't manage to increase the baudrate for that. (Theoretically this should be possible using "dtparam=i2c_vc=on" to enable it and "dtparam=i2c_vc_baudrate=800000" to set the baudrate, but for me it stayed at the default (low) speed.)
+
+The solution I found is by [Christian U. on stackexchange](https://raspberrypi.stackexchange.com/a/85316) (thanks!). He suggests connecting a diode from pin 3 to another GPIO (pin 4 in my case) and the button between pin 4 and ground. That way when the Pi is off it can be turned on by pushing the button (as current can flow from pin 3 to pin 4) but when the I2C peripheral pulls the clock line low this doesn't affect pin 4. When the button is pressed pin 4 is pulled low which triggers the shutdown (I'm using the gpiozero library for button handling). Pushing the button also pulls pin 3 low, so this messes up the I2C interface, but as the device is shutting down anyway this doesn't matter.
+
+To make sure that the Pi wakes up when the button is pressed the forward voltage of the diode must be small enough. I tried a red LED but that didn't work, so I'm using an SS24 power diode now (the only other kind of diode I had at hand).
+
+
+## Code
 The code here is not very nice, and it's pretty slow, mostly because of the display library. But it's just fast enough for ~10 updates per second, which is about the limit of what is nice to look at anyway.
