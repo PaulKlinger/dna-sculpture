@@ -1,0 +1,12 @@
+[Unit]
+Description=DNA sculpture
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/pi/dna-sculpture/code/main.py
+Restart=on-abort
+WorkingDirectory=/home/pi/dna-sculpture/code/
+
+[Install]
+WantedBy=multi-user.target

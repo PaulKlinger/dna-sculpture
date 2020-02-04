@@ -40,3 +40,5 @@ To make sure that the Pi wakes up when the button is pressed the forward voltage
 
 ## Code
 The code here is not very nice, and it's pretty slow, mostly because of the display library. But it's just fast enough for ~10 updates per second, which is about the limit of what is nice to look at anyway.
+
+The file dna.service is the systemd service configuration used to start main.py on startup (mostly as a syntax reminder to myself).
