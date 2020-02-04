@@ -27,6 +27,7 @@ class MinimalMemoryFont(object):
     
     def draw_char(self, char, x, y, framebuffer, color, size=1): # pylint: disable=too-many-arguments
         """Draw one character at position (x,y) to a framebuffer in a given color"""
+        # TODO: Don't need to do this pixel by pixel...
         # Go through each column of the character.
         for char_x in range(self.font_width):
             # Grab the byte for the current column of font data.
